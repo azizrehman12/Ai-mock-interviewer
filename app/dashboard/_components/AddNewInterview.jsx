@@ -15,6 +15,7 @@ import { useUser } from "@clerk/nextjs";
 import moment from "moment";
 import { db } from "@/utils/db"; // Ensure db is correctly imported
 import { MockInterview } from "@/utils/schema"; // Ensure MockInterview model is correctly imported
+import { useRouter } from "next/navigation";
 
 function AddNewInterview() {
   const [openDialog, setOpenDialog] = useState(false);
@@ -23,7 +24,9 @@ function AddNewInterview() {
   const [jobExperience, setJobExperience] = useState("");
   const [loading, setLoading] = useState(false);
   const [aiMessage, setAiMessage] = useState("");
-  const { user } = useUser(); // Fixed: Added parentheses
+  const { user } = useUser();
+  const [jsonResponse, setJsonResponse] = useState([]);
+  const router=useRouter();
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -46,8 +49,8 @@ function AddNewInterview() {
       Provide 'question' and 'answer' fields in JSON.
     `;
 
-    setLoading(true);
     setAiMessage("Generating interview with AI...");
+    setLoading(true);
 
     try {
       console.log("Sending API request...");
@@ -59,18 +62,25 @@ function AddNewInterview() {
 
       const parsedResponse = JSON.parse(responseText.replace(/```json|```/g, ""));
       console.log("Parsed Response:", parsedResponse);
+      setJsonResponse(parsedResponse);
 
-      // Insert interview details into the database
+      // Ensure the table exists in NeonDB
       const resp = await db.insert(MockInterview).values({
         mockId: uuidv4(),
         jsonMockResp: parsedResponse,
         jobPosition: jobPosition,
         jobDesc: jobDesc,
         jobExperience: jobExperience,
-        createdBy: user?.primaryEmailAddress?.emailAddress, // Fixed typo
-        createdAt: moment().format("DD-MM-yyyy"),
-      }).returning({ mockId: MockInterview.mockId }); // Ensured correct return structure
+        createdBy: user?.primaryEmailAddress?.emailAddress || "Unknown",
+        createdAt: moment().format("YYYY-MM-DD HH:mm:ss"),
+      }).returning({ mockId: MockInterview.mockId });
 
+      console.log("Inserted ID:", resp);
+      if(resp)
+      {
+        setOpenDialog(false);
+        router.push('/dashboard/interview/'+resp[0]?.mockId)
+      }
       alert(`Interview for ${jobPosition} has been created successfully!`);
       setOpenDialog(false);
     } catch (error) {
